@@ -1,0 +1,864 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width,initial-scale=1" />
+  <title>LLM Math Frontend — Gemini / OpenRouter</title>
+
+  <!-- KaTeX CDN (used for rendering formulas). -->
+  <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/katex@0.16.8/dist/katex.min.css" integrity="" crossorigin="anonymous">
+  <script defer src="https://cdn.jsdelivr.net/npm/katex@0.16.8/dist/katex.min.js"></script>
+  <script defer src="https://cdn.jsdelivr.net/npm/katex@0.16.8/dist/contrib/auto-render.min.js" onload=""></script>
+
+  <style>
+    :root{
+      --bg:#0f1724; --card:#0b1220; --muted:#9aa4b2; --accent:#6ee7b7;
+      --glass: rgba(255,255,255,0.03);
+      font-family: Inter, ui-sans-serif, system-ui, -apple-system, "Segoe UI", Roboto, "Helvetica Neue", Arial;
+    }
+    html,body,#app{height:100%; margin:0; padding:0;}
+    body{
+      background: linear-gradient(180deg,#071022 0%, #081325 60%);
+      color:#e6eef6; -webkit-font-smoothing:antialiased;
+    }
+    #app{
+      display:flex; flex-direction:column; gap:18px; padding:18px;
+      box-sizing:border-box; height:100vh;
+    }
+    header{
+      display:flex; gap:12px; align-items:center; justify-content:space-between;
+    }
+    .title{
+      display:flex; gap:12px; align-items:center;
+    }
+    .logo{
+      background:linear-gradient(90deg,#60a5fa,#7c3aed); width:44px; height:44px; border-radius:8px;
+      display:flex; align-items:center; justify-content:center; font-weight:700; color:white;
+      box-shadow: 0 6px 16px rgba(124,58,237,0.18);
+    }
+    h1{ font-size:18px; margin:0; font-weight:600; color:#f8fafc; }
+    p.small{ margin:0; color:var(--muted); font-size:13px; }
+
+    .controls{
+      display:flex; gap:12px; align-items:center;
+    }
+    .card{
+      background:var(--card); border-radius:12px; padding:12px; box-shadow: 0 6px 18px rgba(2,6,23,0.6);
+      border:1px solid rgba(255,255,255,0.02);
+    }
+
+    .config{
+      display:flex; gap:12px; align-items:center;
+    }
+    .config input, .config select, .config textarea{
+      background:var(--glass); border:1px solid rgba(255,255,255,0.03); padding:8px 10px; color:inherit;
+      border-radius:8px; min-width:240px; outline:none;
+      font-size:14px;
+    }
+    .config label{ font-size:12px; color:var(--muted); display:block; margin-bottom:6px; }
+
+    main{
+      display:flex; gap:18px; flex:1; min-height:0;
+    }
+    .left, .right{
+      flex:1; display:flex; flex-direction:column; gap:12px; min-height:0;
+    }
+
+    .textbox{
+      flex:1; min-height:0; display:flex; flex-direction:column;
+    }
+    .textbox textarea{
+      flex:1; resize:none; padding:14px; border-radius:10px; border:1px dashed rgba(255,255,255,0.03);
+      background: linear-gradient(180deg, rgba(255,255,255,0.01), rgba(255,255,255,0.005));
+      color:inherit; font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, "Roboto Mono", monospace;
+      font-size:14px; min-height:220px; outline:none;
+    }
+
+    .prompt-bar{
+      display:flex; gap:8px; align-items:center; margin-top:6px;
+    }
+    .prompt-bar input{
+      flex:1; padding:10px 12px; border-radius:10px; border:1px solid rgba(255,255,255,0.03);
+      background:var(--glass); color:inherit; font-size:14px; outline:none;
+    }
+    .btn{
+      padding:10px 12px; border-radius:10px; cursor:pointer; border:none; font-weight:600;
+    }
+    .btn.primary{ background:linear-gradient(90deg,#06b6d4,#3b82f6); color:white; }
+    .btn.alt{ background:transparent; color:var(--muted); border:1px solid rgba(255,255,255,0.03); }
+    .btn.warn{ background:#ef4444; color:white; }
+
+    .output{
+      flex:1; padding:12px; overflow:auto; border-radius:10px; background: linear-gradient(180deg, rgba(255,255,255,0.01), rgba(255,255,255,0.005));
+      border:1px solid rgba(255,255,255,0.02);
+    }
+
+    .formula-item{
+      padding:10px; margin-bottom:8px; border-radius:8px; background: rgba(255,255,255,0.01);
+      display:flex; gap:12px; align-items:flex-start; cursor:default;
+    }
+    .formula-number{ font-weight:700; width:42px; color:var(--accent); }
+    .formula-latex{ flex:1; font-size:16px; }
+    .term{ display:inline-block; padding:2px 6px; border-radius:6px; background:rgba(255,255,255,0.02); margin:0 3px; cursor:pointer; }
+    .term:hover{ box-shadow:0 6px 20px rgba(0,0,0,0.5); transform:translateY(-2px); }
+
+    /* Modal */
+    .modal-backdrop{ position:fixed; inset:0; display:none; align-items:center; justify-content:center; z-index:60; }
+    .modal-backdrop.show{ display:flex; background:rgba(2,6,23,0.6); }
+    .modal{
+      max-width:720px; width:92%; background:#081325; border-radius:12px; padding:18px; color:#e6eef6;
+      border:1px solid rgba(255,255,255,0.03);
+    }
+    .modal .close{ float:right; cursor:pointer; font-weight:700; padding:6px 8px; }
+    .modal h3{ margin:0 0 6px 0; }
+    .meta{ font-size:13px; color:var(--muted); margin-bottom:8px; }
+
+    footer{ display:flex; justify-content:space-between; align-items:center; gap:12px; }
+    .small-muted{ color:var(--muted); font-size:13px; }
+
+    /* Ensure formulas LTR */
+    .ltr-enforce{ direction:ltr; unicode-bidi:embed; display:inline-block; }
+  </style>
+</head>
+<body>
+  <div id="app">
+    <header>
+      <div class="title">
+        <div class="logo">GM</div>
+        <div>
+          <h1>Math LLM Frontend — Gemini & OpenRouter</h1>
+          <p class="small">Paste equations. Extract, infer missing formulas, sort by dependency, inspect interactively.</p>
+        </div>
+      </div>
+
+      <div class="controls">
+        <div class="card config">
+          <div style="display:flex;flex-direction:column;">
+            <label>Gemini API Key</label>
+            <input id="geminiKey" placeholder="sk-... (personal Gemini key)" />
+          </div>
+
+          <div style="display:flex;flex-direction:column;">
+            <label>Gemini Model</label>
+            <input id="geminiModel" value="gemini-2.5-flash" />
+          </div>
+
+          <div style="display:flex;flex-direction:column;">
+            <label>OpenRouter API Key (optional)</label>
+            <input id="openRouterKey" placeholder="or leave empty to use Gemini" />
+          </div>
+
+          <div style="display:flex;flex-direction:column; align-items:flex-end;">
+            <button class="btn alt" id="setKeysBtn">Set</button>
+            <div id="status" style="margin-top:6px; font-size:12px; color:var(--muted)">Status: idle</div>
+          </div>
+        </div>
+      </div>
+    </header>
+
+    <main>
+      <section class="left">
+        <div class="card textbox">
+          <label style="font-size:13px; color:var(--muted); margin-bottom:6px;">Formula Processing Textbox</label>
+          <textarea id="inputText" placeholder="Paste or type text containing mathematical formulas here..."></textarea>
+
+          <div style="display:flex; gap:8px; margin-top:10px;">
+            <button class="btn primary" id="generateBtn">Generate</button>
+            <button class="btn alt" id="regenerateBtn">Regenerate</button>
+            <button class="btn alt" id="analyzeBtn">Send to LLM for Analyzing</button>
+            <button class="btn" id="downloadBtn" style="background:linear-gradient(90deg,#f97316,#f43f5e); color:white;">Download as HTML</button>
+          </div>
+
+          <div style="margin-top:10px;" class="small-muted">Prompt bar:</div>
+          <div class="prompt-bar">
+            <input id="promptBar" placeholder='Write a free-form prompt (e.g., "explain formula 2 in detail")' />
+            <button class="btn primary" id="promptSend">Send</button>
+          </div>
+        </div>
+      </section>
+
+      <section class="right">
+        <div class="card output" id="outputArea">
+          <div id="formulasContainer">
+            <!-- Rendered formulas will appear here -->
+          </div>
+        </div>
+      </section>
+    </main>
+
+    <footer>
+      <div class="small-muted">UCR: KaTeX rendering enforced. LTR enforced for formulas.</div>
+      <div class="small-muted">Tip: provide a Gemini key for primary provider, or OpenRouter key to use OpenRouter models.</div>
+    </footer>
+  </div>
+
+  <!-- Modal for explanations -->
+  <div class="modal-backdrop" id="modalBackdrop">
+    <div class="modal">
+      <div style="display:flex; justify-content:space-between; align-items:center;">
+        <h3 id="modalTitle">Term explanation</h3>
+        <div class="close" id="modalClose">✕</div>
+      </div>
+      <div class="meta" id="modalMeta"></div>
+      <div id="modalBody"></div>
+    </div>
+  </div>
+
+  <script>
+    // App state
+    let config = null;
+    let lastResponse = null; // JSON or text returned from LLM
+    let lastSortedFormulas = []; // array of {index, latex, description, inferred, parts: [{term, full, explanation}]}
+    let providerState = { geminiKey: '', geminiModel: 'gemini-2.5-flash', openRouterKey: '' };
+
+    // Fetch config.json (system prompts & rules)
+    async function loadConfig(){
+      try {
+        const res = await fetch('config.json', {cache: 'no-store'});
+        if(!res.ok) throw new Error('Cannot load config.json');
+        config = await res.json();
+        console.log('Config loaded', config);
+      } catch(e){
+        console.error('Failed to load config.json:', e);
+        // fallback minimal config
+        config = {
+          systemPrompt: "You are an expert mathematician assistant. Extract formulas, infer missing steps, sort by dependency.",
+          rules: []
+        };
+      }
+    }
+
+    // Utility: set status
+    function setStatus(txt){
+      document.getElementById('status').textContent = 'Status: ' + txt;
+    }
+
+    // Initialize
+    (async function init(){
+      await loadConfig();
+      // hook buttons
+      document.getElementById('setKeysBtn').addEventListener('click', () => {
+        providerState.geminiKey = document.getElementById('geminiKey').value.trim();
+        providerState.geminiModel = document.getElementById('geminiModel').value.trim() || 'gemini-2.5-flash';
+        providerState.openRouterKey = document.getElementById('openRouterKey').value.trim();
+        setStatus('Keys set (Gemini prioritized).');
+      });
+
+      document.getElementById('generateBtn').addEventListener('click', onGenerate);
+      document.getElementById('regenerateBtn').addEventListener('click', onRegenerate);
+      document.getElementById('analyzeBtn').addEventListener('click', onSendSortedForAnalysis);
+      document.getElementById('promptSend').addEventListener('click', onPromptSend);
+      document.getElementById('downloadBtn').addEventListener('click', onDownload);
+      document.getElementById('modalClose').addEventListener('click', closeModal);
+
+      // small UX: pressing Enter in prompt triggers send (but not shift-enter)
+      document.getElementById('promptBar').addEventListener('keydown', (e) => {
+        if(e.key === 'Enter' && !e.shiftKey){
+          e.preventDefault(); onPromptSend();
+        }
+      });
+
+      setStatus('ready');
+    })();
+
+    // --- LLM request logic (Gemini prioritized, OpenRouter fallback) ---
+    async function callLLM({prompt, temperature=0.0, maxTokens=1200}){
+      setStatus('calling LLM...');
+      // Combine system prompt and rules from config
+      const systemPrompt = config?.systemPrompt || '';
+      const rules = (config?.rules || []).map(r => `${r.title}: ${r.text}`).join("\\n");
+
+      const compositePrompt = [
+        systemPrompt,
+        rules,
+        "",
+        "User input:",
+        prompt
+      ].join("\\n");
+
+      // If Gemini key exists -> prefer Gemini
+      if(providerState.geminiKey){
+        try {
+          return await callGemini(compositePrompt, {model: providerState.geminiModel, key: providerState.geminiKey, temperature, maxTokens});
+        } catch(e){
+          console.warn('Gemini call failed, will try OpenRouter if available', e);
+        }
+      }
+
+      // Try OpenRouter if key provided
+      if(providerState.openRouterKey){
+        try {
+          return await callOpenRouter(compositePrompt, {key: providerState.openRouterKey, temperature, maxTokens});
+        } catch(e){
+          console.warn('OpenRouter call failed', e);
+        }
+      }
+
+      // Neither provider available — fallback to mock
+      setStatus('no API key provided - using local mock response');
+      await new Promise(r=>setTimeout(r,600));
+      const mock = mockExtractAndSort(prompt);
+      lastResponse = mock;
+      setStatus('done (mock)');
+      return mock;
+    }
+
+    // NOTE: Real Gemini REST endpoints & payloads may differ — adapt to your environment / auth method.
+    async function callGemini(text, {model, key, temperature, maxTokens}){
+      // Example pattern for Gemini via Google REST API (this will likely require extra headers/format).
+      // Here we attempt a generic fetch to a hypothetical endpoint. Replace with your actual endpoint & auth.
+      const endpoint = 'https://gemini.googleapis.com/v1/models/' + encodeURIComponent(model) + ':generate';
+      const payload = {
+        prompt: text,
+        temperature, maxOutputTokens: maxTokens
+      };
+      // This is a best-effort; many deployments require OAuth or special headers. If request fails, code will catch and fallback.
+      const res = await fetch(endpoint, {
+        method:'POST',
+        headers:{
+          'Content-Type':'application/json',
+          'Authorization': 'Bearer ' + key
+        },
+        body: JSON.stringify(payload)
+      });
+      if(!res.ok) throw new Error('Gemini API call failed: ' + res.status);
+      const data = await res.json();
+      // Expect a text field or structured content — adapt here
+      const textOut = extractTextFromGeminiResponse(data);
+      lastResponse = { type:'llm', raw:data, text:textOut };
+      setStatus('done (gemini)');
+      return lastResponse;
+    }
+
+    // Simplified extractor for the example Gemini response shape
+    function extractTextFromGeminiResponse(data){
+      // Different Gemini responses are possible. Try to take sensible fields.
+      if(typeof data === 'string') return data;
+      if(data.output && data.output[0] && data.output[0].content) {
+        return data.output.map(o => o.content).join('\\n');
+      }
+      if(data.candidates && data.candidates[0] && data.candidates[0].content) return data.candidates[0].content;
+      // fallback
+      return JSON.stringify(data);
+    }
+
+    // Call OpenRouter (example generic pattern)
+    async function callOpenRouter(text, {key, temperature, maxTokens}){
+      const endpoint = 'https://api.openrouter.ai/v1/chat/completions';
+      const payload = {
+        model: "gpt-4o-mini", // placeholder; actual available models vary
+        messages: [{role:'system', content: config.systemPrompt || ''}, {role:'user', content: text}],
+        temperature
+      };
+      const res = await fetch(endpoint, {
+        method:'POST',
+        headers:{
+          'Content-Type':'application/json',
+          'Authorization':'Bearer ' + key
+        },
+        body: JSON.stringify(payload)
+      });
+      if(!res.ok) throw new Error('OpenRouter call failed: ' + res.status);
+      const data = await res.json();
+      const textOut = (data.choices && data.choices[0] && data.choices[0].message && data.choices[0].message.content) ? data.choices[0].message.content : JSON.stringify(data);
+      lastResponse = { type:'llm', raw:data, text:textOut };
+      setStatus('done (openrouter)');
+      return lastResponse;
+    }
+
+    // --- App actions ---
+    async function onGenerate(){
+      const text = document.getElementById('inputText').value.trim();
+      if(!text){
+        alert('Please paste or type text into the formula textbox.');
+        return;
+      }
+      setStatus('generating...');
+      // Build a prompt instructing the LLM to extract formulas and sort them and infer missing ones
+      const prompt = `
+User-provided text:
+-----
+${text}
+-----
+
+TASK:
+1) Extract all mathematical formulas present in the text. Return each formula in LaTeX math mode (e.g., \\( ... \\) or $$...$$).
+2) Identify dependencies between formulas. Sort formulas so any formula that defines a quantity required by another must appear earlier.
+3) If some intermediate formulas or definitions are missing to make the chain complete, infer the minimal missing formulas and label them as [inferred].
+4) For each numbered formula, include an optional short description of what it computes and identify which formulas it depends on.
+5) Output should be a numbered list, each item containing: number, LaTeX formula, brief description, dependency list, and whether it is inferred.
+6) Respond concisely and use LaTeX for all math.
+
+Return only the numbered list and brief descriptions in plain text (not JSON).
+      `;
+
+      try {
+        const res = await callLLM({prompt, temperature:0.0, maxTokens:1200});
+        const textOut = res.text || (typeof res === 'string' ? res : JSON.stringify(res));
+        parseLLMFormulaList(textOut);
+      } catch(e){
+        console.error(e);
+        alert('LLM call failed: ' + e.message);
+      }
+    }
+
+    async function onRegenerate(){
+      // Use previous prompt if available (basic behavior: re-send same raw input to LLM)
+      const text = document.getElementById('inputText').value.trim();
+      if(!text){
+        alert('Please paste or type text into the formula textbox before regenerating.');
+        return;
+      }
+      setStatus('regenerating...');
+      await onGenerate();
+    }
+
+    function onPromptSend(){
+      const prompt = document.getElementById('promptBar').value.trim();
+      if(!prompt){
+        alert('Please write a prompt.');
+        return;
+      }
+      // If we have last sorted formulas, send them as context; otherwise send the prompt alone
+      let context = '';
+      if(lastSortedFormulas.length){
+        context = lastSortedFormulas.map(f => `${f.index}. ${f.latex} -- ${f.description || ''}`).join('\\n');
+      }
+      const fullPrompt = (context ? `Context (sorted formulas):\\n${context}\\n\\nUser prompt:\\n${prompt}` : prompt);
+      callLLM({prompt: fullPrompt, temperature:0.2, maxTokens:800})
+        .then(res => {
+          const t = res.text || (typeof res === 'string' ? res : JSON.stringify(res));
+          // Append result to output area below formulas
+          const el = document.createElement('div');
+          el.style.marginTop='12px';
+          el.style.whiteSpace='pre-wrap';
+          el.textContent = t;
+          document.getElementById('outputArea').appendChild(el);
+        })
+        .catch(e => alert('LLM prompt failed: ' + e.message));
+    }
+
+    // When user wants to send the already-sorted formulas back to the LLM for deeper analysis
+    async function onSendSortedForAnalysis(){
+      if(!lastSortedFormulas.length){
+        alert('No sorted formulas available. Generate first.');
+        return;
+      }
+      const serialized = lastSortedFormulas.map(f => `${f.index}. ${f.latex} ${f.inferred ? '[inferred]' : ''} -- ${f.description || ''}`).join('\\n');
+      const prompt = `
+You are given the following sorted formulas (dependencies satisfied). For each formula:
+- Provide a short step-by-step explanation of how it is computed.
+- Show where it is used in the overall chain (which formula numbers).
+- If there are alternative equivalent formulations, mention them briefly.
+Return JSON array of objects with fields: index, latex, explanation, usedBy (array).
+      `;
+      const fullPrompt = prompt + "\\n\\nFORMULAS:\\n" + serialized;
+      try {
+        const res = await callLLM({prompt: fullPrompt, temperature:0.1, maxTokens:1200});
+        const t = res.text || (typeof res === 'string' ? res : JSON.stringify(res));
+        // Try to parse JSON from the response; if fails, just show text
+        try {
+          const parsed = JSON.parse(t);
+          // Map explanations back to terms
+          if(Array.isArray(parsed)){
+            // integrate explanations into lastSortedFormulas items
+            parsed.forEach(obj => {
+              const idx = obj.index;
+              const item = lastSortedFormulas.find(x => x.index === idx);
+              if(item){
+                item.explanation = obj.explanation || '';
+                item.usedBy = obj.usedBy || [];
+              }
+            });
+            renderFormulas();
+            setStatus('analysis done');
+          } else {
+            appendAnalysisText(t);
+            setStatus('analysis done (raw)');
+          }
+        } catch(e){
+          appendAnalysisText(t);
+          setStatus('analysis done (raw)');
+        }
+      } catch(e){
+        alert('Analysis call failed: ' + e.message);
+      }
+    }
+
+    function appendAnalysisText(text){
+      const el = document.createElement('div');
+      el.style.marginTop='12px';
+      el.style.whiteSpace='pre-wrap';
+      el.textContent = text;
+      document.getElementById('outputArea').appendChild(el);
+    }
+
+    // --- Parsing the LLM output (try to be tolerant) ---
+    function parseLLMFormulaList(textOut){
+      // Heuristic parser:
+      // Expect lines beginning with "1." "2." etc. Each line or block contains LaTeX inline or display math.
+      const lines = textOut.split(/\r?\n/).map(l=>l.trim()).filter(l=>l.length);
+      const items = [];
+      let current = null;
+      for(const line of lines){
+        const m = line.match(/^(\[?inferred\]?\s*)?(\d+)\.?\s*(.*)$/i);
+        if(m){
+          if(current) items.push(current);
+          current = {index: parseInt(m[2],10), raw: m[3], inferred: !!m[1], description:'', latex:'', parts:[]};
+          // try extract latex from raw
+          const latex = extractLatexFromString(current.raw);
+          if(latex) current.latex = latex;
+          // description = remainder
+          const desc = current.raw.replace(latex?latex:'','').trim();
+          current.description = desc;
+        } else {
+          // append as continuation of description
+          if(current){
+            current.description += ' ' + line;
+            if(!current.latex){
+              const latex = extractLatexFromString(line);
+              if(latex) current.latex = latex;
+            }
+          } else {
+            // nothing: maybe the LLM started without numbers -> try to capture formula-like lines
+            const latex = extractLatexFromString(line);
+            if(latex) {
+              const idx = items.length+1;
+              items.push({index: idx, raw: line, latex, description:'', inferred:false, parts:[]});
+            }
+          }
+        }
+      }
+      if(current) items.push(current);
+
+      // If the LLM returned a blob that doesn't include numbers, try splitting by double newlines for blocks
+      if(items.length===0){
+        const blocks = textOut.split(/\n\s*\n/).map(b=>b.trim()).filter(Boolean);
+        let idx=1;
+        for(const b of blocks){
+          const latex = extractLatexFromString(b) || '';
+          items.push({index:idx++, raw:b, latex, description:'', inferred:b.toLowerCase().includes('inferred'), parts:[]});
+        }
+      }
+
+      // Post-process: ensure latex wrapper $$...$$ or \( ... \)
+      items.forEach(it => {
+        if(it.latex && !/^\\\(|^\$\$/.test(it.latex)){
+          // wrap inline
+          it.latex = '\\(' + it.latex + '\\)';
+        }
+        // attempt to extract small parts for hover: try to detect tokens or common expressions like y_i, ȳ, Σ etc.
+        it.parts = extractPartsForHover(it.latex);
+      });
+
+      lastSortedFormulas = items.sort((a,b)=>a.index - b.index);
+      renderFormulas();
+      setStatus('formulas rendered');
+    }
+
+    // Extract LaTeX expression from a string (naive)
+    function extractLatexFromString(s){
+      // look for $$...$$ or \[...\] or \( ... \) or inline $...$
+      let m = s.match(/\$\$(.*?)\$\$/s);
+      if(m) return m[0]; // keep delimiters
+      m = s.match(/\\\[(.*?)\\\]/s);
+      if(m) return m[0];
+      m = s.match(/\\\((.*?)\\\)/s);
+      if(m) return m[0];
+      m = s.match(/\$(.*?)\$/s);
+      if(m) return '$' + m[1] + '$';
+      // if none, attempt to find LaTeX-like pattern with backslashes and braces
+      m = s.match(/([A-Za-z0-9\\_\^\{\}\(\)\[\]\s\+\-\*\\=]+\\[a-zA-Z]+\{.*?\})/s);
+      if(m) return m[0];
+      // fall back: pick first sign of mathlike piece
+      m = s.match(/([0-9A-Za-z_\\\^\{\}\(\)\+\-\*]+[=Σσ])/);
+      if(m) return m[0];
+      return '';
+    }
+
+    // Extract small terms for hover (very heuristic)
+    function extractPartsForHover(latex){
+      // Remove delimiters
+      let inner = latex.replace(/^\$\$|^\$|\\\(|\\\[/g,'').replace(/\$\$$|\$|\\\)|\\\]/g,'');
+      // Find tokens like y_i, \bar{y}, \bar{y}, y - \bar{y}, \sum_{i} y_i
+      const parts = [];
+      const regexps = [
+        /y_i|y_\\?i|y_{i}/g,
+        /\\bar\{y\}|\\overline\{y\}|\\bar y/g,
+        /y_i\s*-\s*\\bar\{y\}/g,
+        /\\sum_{[^}]*}[^\\]+/g,
+        /\\frac\{[^}]*\}\{[^}]*\}/g,
+        /\\Sigma|\\sum|\\prod/g
+      ];
+      const seen = new Set();
+      for(const rx of regexps){
+        let m;
+        while((m = rx.exec(inner)) !== null){
+          const term = m[0];
+          if(!seen.has(term)){
+            seen.add(term);
+            // try find a fuller form for the term in the inner string (naive)
+            let full = term;
+            // For y_i - \bar{y} try to expand to (y_i - \bar{y})
+            if(/y_i\s*-\s*\\bar/.test(term)){
+              full = term;
+            }
+            // push with placeholder explanation
+            parts.push({term:term, full:term, explanation: 'Autogenerated: ' + term});
+          }
+        }
+      }
+
+      // If no parts found, create basic tokens by splitting on spaces and math operators and choose small tokens
+      if(parts.length===0){
+        const tokens = inner.split(/[\s\+\-\*=\^\\\{\}\(\)\[\],]+/).filter(Boolean);
+        for(const t of tokens.slice(0,6)){
+          parts.push({term:t, full:t, explanation: 'Autogenerated token: ' + t});
+        }
+      }
+      return parts;
+    }
+
+    // Render the formula items using KaTeX and interactive spans
+    function renderFormulas(){
+      const container = document.getElementById('formulasContainer');
+      container.innerHTML = '';
+      for(const item of lastSortedFormulas){
+        const div = document.createElement('div');
+        div.className = 'formula-item';
+
+        const num = document.createElement('div');
+        num.className = 'formula-number';
+        num.textContent = item.index + (item.inferred ? ' *' : '');
+
+        const body = document.createElement('div');
+        body.className = 'formula-latex';
+        // create a wrapper for LTR enforcement
+        const ltrWrap = document.createElement('span');
+        ltrWrap.className = 'ltr-enforce';
+
+        // If we have parts, replace occurrences in rendered HTML with spans. We need to render the LaTeX into HTML first.
+        // We will render into a temporary span, then search and replace textual instances of terms.
+        const tempSpan = document.createElement('span');
+        tempSpan.style.visibility='hidden'; tempSpan.style.position='absolute';
+        document.body.appendChild(tempSpan);
+        try {
+          // Use katex.renderToString for static conversion
+          const katexSrc = item.latex || ('\\(' + item.raw + '\\)');
+          tempSpan.innerHTML = katex.renderToString(katexSrc, {throwOnError:false});
+        } catch(e){
+          tempSpan.textContent = item.latex || item.raw;
+        }
+        // Convert to HTML and then wrap tokens
+        let html = tempSpan.innerHTML;
+        document.body.removeChild(tempSpan);
+
+        // For each part, try to replace its first occurrence in the HTML with a clickable span
+        item.parts.forEach((p, idx) => {
+          const safeTerm = p.term.replace(/([.*+?^=!:${}()|\[\]\/\\])/g, '\\$1');
+          const re = new RegExp(safeTerm);
+          html = html.replace(re, `<span class="term" data-full="${escapeHtml(p.full)}" data-expl="${escapeHtml(p.explanation)}" data-index="${item.index}" data-term-index="${idx}">${escapeHtml(p.term)}</span>`);
+        });
+
+        ltrWrap.innerHTML = html;
+        // description and explanation
+        const desc = document.createElement('div');
+        desc.style.fontSize='13px'; desc.style.color='var(--muted)'; desc.style.marginTop='6px';
+        desc.textContent = item.description || (item.explanation ? item.explanation : '');
+
+        body.appendChild(ltrWrap);
+        body.appendChild(desc);
+
+        div.appendChild(num);
+        div.appendChild(body);
+
+        container.appendChild(div);
+      }
+
+      // Attach event listeners for term hover & click
+      const terms = container.querySelectorAll('.term');
+      terms.forEach(t => {
+        t.addEventListener('mouseenter', (e) => {
+          // on hover, replace inner text with the 'full' expression by rendering the LaTeX if it looks like LaTeX
+          const full = t.getAttribute('data-full') || '';
+          if(full){
+            // attempt to render full as LaTeX (if it contains backslash or braces)
+            const fullText = full;
+            try {
+              const rendered = katex.renderToString(fullText, {throwOnError:false});
+              t.innerHTML = rendered;
+            } catch(e){
+              t.textContent = fullText;
+            }
+          }
+        });
+        t.addEventListener('mouseleave', (e) => {
+          // restore to the short term (we stored originally in data-term)
+          const original = t.getAttribute('data-original') || null;
+          if(original){
+            t.textContent = original;
+          } else {
+            // best-effort: shorten the innerText to the first 10 chars
+            // (we didn't store original separately, so store now)
+          }
+        });
+        // store original text
+        if(!t.getAttribute('data-original')) t.setAttribute('data-original', t.textContent);
+
+        t.addEventListener('click', (e) => {
+          // open modal with explanation
+          const full = t.getAttribute('data-full') || t.textContent;
+          const expl = t.getAttribute('data-expl') || '';
+          const index = t.getAttribute('data-index') || '';
+          openModal(`Formula part: ${t.getAttribute('data-original')}`, `<strong>Full expression:</strong><div style="margin-top:8px;">${escapeHtml(full)}</div><div style="margin-top:10px;"><em>${escapeHtml(expl)}</em></div>`, `Used in formula number ${index}`);
+        });
+      });
+    }
+
+    function openModal(title, htmlBody, meta){
+      const mb = document.getElementById('modalBackdrop');
+      document.getElementById('modalTitle').textContent = title;
+      document.getElementById('modalMeta').innerHTML = meta || '';
+      document.getElementById('modalBody').innerHTML = htmlBody || '';
+      mb.classList.add('show');
+    }
+    function closeModal(){
+      const mb = document.getElementById('modalBackdrop');
+      mb.classList.remove('show');
+    }
+
+    // --- Download as HTML implementation ---
+    function onDownload(){
+      // Build a self-contained-ish HTML string: include inline CSS and app JS (excluding heavy libs). For KaTeX we include CDN links.
+      const html = buildDownloadableHTML();
+      const blob = new Blob([html], {type:'text/html'});
+      const url = URL.createObjectURL(blob);
+      const a = document.createElement('a');
+      a.href = url;
+      a.download = 'llm-math-export.html';
+      document.body.appendChild(a);
+      a.click();
+      a.remove();
+      URL.revokeObjectURL(url);
+    }
+
+    function buildDownloadableHTML(){
+      // Grab current input & formulas to include
+      const inputText = document.getElementById('inputText').value;
+      const formulasHtml = document.getElementById('formulasContainer').innerHTML;
+
+      // CSS (reuse small subset above)
+      const styleText = document.querySelector('style').innerHTML;
+
+      // JS: We'll include a small script that enables modal & KaTeX rendering on the downloaded page.
+      const script = `
+        // Downloaded page script (minimal)
+        function escapeHtml(s){ return s.replace(/[&<>"]/g, function(c){return {'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;'}[c];});}
+        document.addEventListener('DOMContentLoaded', function(){
+          // Attach click listeners for .term spans
+          document.querySelectorAll('.term').forEach(t=>{
+            t.addEventListener('click', ()=>{
+              const full = t.getAttribute('data-full') || t.textContent;
+              const expl = t.getAttribute('data-expl') || '';
+              const modal = document.getElementById('downloadModal');
+              modal.querySelector('.modal-title').textContent = t.getAttribute('data-original') || t.textContent;
+              modal.querySelector('.modal-meta').innerHTML = '';
+              modal.querySelector('.modal-body').innerHTML = '<div style="white-space:pre-wrap;">' + escapeHtml(full) + '</div><div style="margin-top:8px;"><em>'+escapeHtml(expl)+'</em></div>';
+              modal.classList.add('show');
+            });
+          });
+          document.getElementById('downloadModalClose').addEventListener('click', ()=>document.getElementById('downloadModal').classList.remove('show'));
+          // Try to render KaTeX in the formulas container (katex and auto-render script included)
+          if(window.katex && window.renderMathInElement){
+            try { renderMathInElement(document.body, {delimiters:[{left:'\\\\(', right:'\\\\)', display:false},{left:'$$', right:'$$', display:true}]}); }
+            catch(e){ console.warn('KaTeX render failed', e); }
+          }
+        });
+      `;
+
+      // Modal HTML to include in the exported file
+      const modalHtml = `
+        <div id="downloadModal" style="position:fixed; inset:0; display:none; align-items:center; justify-content:center; z-index:9999; background:rgba(2,6,23,0.6);">
+          <div style="background:#081325; color:#e6eef6; padding:16px; border-radius:10px; max-width:720px; width:90%;">
+            <div style="display:flex; justify-content:space-between; align-items:center;">
+              <div class="modal-title" style="font-weight:700;"></div>
+              <div id="downloadModalClose" style="cursor:pointer; font-weight:700;">✕</div>
+            </div>
+            <div class="modal-meta" style="color:#9aa4b2; margin-top:6px;"></div>
+            <div class="modal-body" style="margin-top:8px;"></div>
+          </div>
+        </div>
+      `;
+
+      // Build final HTML
+      const full = `
+<!doctype html>
+<html>
+<head>
+  <meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">
+  <title>Exported LLM Math — formulas</title>
+  <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/katex@0.16.8/dist/katex.min.css">
+  <style>${styleText}</style>
+</head>
+<body style="margin:18px; background:#071022; color:#e6eef6; font-family:Inter,system-ui,Roboto,Arial;">
+  <h2>Exported formulas</h2>
+  <div><strong>Original input:</strong></div>
+  <pre style="background:rgba(255,255,255,0.02); padding:12px; border-radius:8px;">${escapeHtml(inputText)}</pre>
+  <div style="margin-top:12px;">
+    ${formulasHtml}
+  </div>
+
+  ${modalHtml}
+
+  <script src="https://cdn.jsdelivr.net/npm/katex@0.16.8/dist/katex.min.js"></script>
+  <script src="https://cdn.jsdelivr.net/npm/katex@0.16.8/dist/contrib/auto-render.min.js"></script>
+  <script>${script}</script>
+</body>
+</html>
+      `;
+      return full;
+    }
+
+    // --- Helpers ---
+    function escapeHtml(s){ if(!s) return ''; return s.replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;'); }
+
+    // Mock extraction for testing if no API keys are provided
+    function mockExtractAndSort(userText){
+      // A very small heuristic: find lines that look like formulas, common pattern for simple regression example
+      const lines = userText.split(/\\n|\\r/).map(l=>l.trim()).filter(Boolean);
+      const found = [];
+      // Example: if text contains "b = Σ x_i*y_i / Σ x_i^2" -> create set of formulas including inferred mean
+      if(/b\s*=\s*Σ\s*x_i\*y_i/i.test(userText) || /b\s*=\s*\\sum/i.test(userText) || /least-squares/i.test(userText)){
+        found.push({index:1, latex:'\\(\\bar{y} = \\frac{1}{n}\\sum_{i=1}^{n} y_i\\)', description:'Mean of y (inferred)', inferred:true, parts:[{term:'\\bar{y}', full:'\\bar{y} = (1/n) \\sum_{i=1}^n y_i', explanation:'Mean of y'}]});
+        found.push({index:2, latex:'\\(y_i - \\bar{y}\\)', description:'Deviation of observation i from mean', inferred:true, parts:[{term:'y_i - \\bar{y}', full:'y_i - \\bar{y}', explanation:'Deviation used in sums'}]});
+        found.push({index:3, latex:'\\(b = \\frac{\\sum_{i} x_i y_i}{\\sum_{i} x_i^2}\\)', description:'Least squares slope', inferred:false, parts:[{term:'b', full:'b = \\frac{\\sum_i x_i y_i}{\\sum_i x_i^2}', explanation:'Regression slope formula'}]});
+      } else {
+        // generic fallback: find anything between $...$ or \\(...\\) or common math tokens
+        const maybe = userText.match(/\\$([^\\$]+)\\$|\\\\\\(([^\\\\)]+)\\\\\\)|([A-Za-z0-9_\\^\\\\{}]+=[^\\n]+)/g);
+        if(maybe){
+          let idx=1;
+          for(const m of maybe){
+            const latex = m;
+            found.push({index:idx++, latex:'\\(' + latex.replace(/^[\\$]+|[\\$]+$/g,'') + '\\)', description:'extracted', inferred:false, parts:[]});
+          }
+        } else {
+          // try detect simple "y = x + 1" patterns
+          const simple = userText.match(/([A-Za-z0-9_]+\\s*=\\s*[^\\n]+)/g);
+          if(simple){
+            let idx=1;
+            for(const s of simple) found.push({index:idx++, latex:'\\(' + s + '\\)', description:'extracted', inferred:false, parts:[]});
+          }
+        }
+      }
+
+      
+
+      return {type:'mock', text: JSON.stringify(found), structured:found};
+
+      
+    }
+  </script>
+  
+</body>
+
+</html>
